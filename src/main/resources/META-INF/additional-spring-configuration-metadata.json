@@ -24,6 +24,11 @@
       "name": "lolicon.confounding",
       "type": "java.lang.String",
       "description": "if true, the last of byte in picture is random."
+    },
+    {
+      "name": "lolicon.reuse-image",
+      "type": "java.lang.String",
+      "description": "if true, when the quota is 0, used image will be return."
     }
   ]
 }

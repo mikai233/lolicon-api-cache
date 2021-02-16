@@ -28,6 +28,15 @@ import kotlin.random.Random
 
 @Component
 class LoliconUtils {
+    enum class Code(val code: Int, val msg: String) {
+        INTERNAL_ERROR(-1, "内部错误，请向i@loli.best反馈"),
+        SUCCESS(0, "成功"),
+        FORBIDDEN(401, "APIKEY不存在或被封禁"),
+        REJECT(403, "由于不规范的操作而被拒绝调用"),
+        EMPTY(404, "找不到符合关键字的色图"),
+        LIMITED(429, "达到调用额度限制")
+    }
+
     private var quota = 10
     private var quotaMinTtl = 0
     private var lastInvokeAt = System.currentTimeMillis()
@@ -75,46 +84,74 @@ class LoliconUtils {
      * @param keyword  若指定关键字，将会返回从插画标题、作者、标签中模糊搜索的结果
      * @param num 一次返回的结果数量，范围为1到10，不提供 APIKEY 时固定为1；在指定关键字的情况下，结果数量可能会不足指定的数量
      * @param proxy 设置返回的原图链接的域名，你也可以设置为disable来得到真正的原图链接
+     * @param immediately 立即返回，不写入通道
      * @return
      */
     private suspend fun requestImageInfo(
-        r18: Int = 0,
-        keyword: String = "",
-        num: Int = 1,
-        proxy: String = "i.pixiv.cat"
-    ) {
+        r18: Int? = null,
+        keyword: String? = null,
+        num: Int? = null,
+        proxy: String? = null,
+        immediately: Boolean = false
+    ): LoliconSetu? {
         val apiKey = loliconConfig.apiKey
         val size1200 = loliconConfig.size1200
         if (quota <= 0) {
-            logger.warn("当日调用额度已不足")
-            delay(60 * 1000)
+            logger.warn("当日调用额度已不足 r18=${r18 == 1}")
+            if (immediately) {
+                return null
+            } else {
+                delay(60 * 1000)
+            }
         }
         if (quotaMinTtl + lastInvokeAt < System.currentTimeMillis()) {
             delay(System.currentTimeMillis() - lastInvokeAt - quotaMinTtl)
             logger.info("requestImageInfo delay")
         }
         lastInvokeAt = System.currentTimeMillis()
+        val baseUrl = "https://api.lolicon.app/setu/"
+        val parameters = mutableMapOf<String, Any>()
+        if (apiKey.isNotBlank()) {
+            parameters["apikey"] = apiKey
+        }
+        if (r18 != null) {
+            parameters["r18"] = r18
+        }
+        if (keyword != null) {
+            parameters["keyword"] = keyword
+        }
+        if (num != null) {
+            parameters["num"] = num
+        }
+        if (proxy != null) {
+            parameters["proxy"] = proxy
+        }
+        if (size1200) {
+            parameters["size1200"] = size1200
+        }
+        val stringParameters = parameters.map { "${it.key}=${it.value}" }.joinToString("&")
+        val url = "${baseUrl}?${stringParameters}"
         logger.info(
-            "invoke api, api key: {}, size1200: {}, r18: {}, keyword: {}, num: {}, proxy: {}, quota: {}, quotaMinTtl: {}, lastInvokeAt: {}",
-            apiKey,
-            size1200,
-            r18,
-            keyword,
-            num,
-            proxy,
+            "invoke lolicon api, url: {} quota: {}, quotaMinTtl: {}, lastInvokeAt: {}",
+            url,
             quota,
             quotaMinTtl,
             Date(lastInvokeAt),
         )
         val result = restTemplate.getForEntity(
-            "https://api.lolicon.app/setu/?apikey=${apiKey}&r18=${r18}&keyword=${keyword}&num=${num}&proxy=${proxy}&size1200=${size1200}",
+            url,
             LoliconResponse::class.java
         )
         val body = result.body
+        if (immediately) {
+            return body?.data?.firstOrNull()
+        }
         if (body != null) {
-            logger.info("send image info to channel, size: {}", body.data.size)
+            logger.info("send image info to channel, r18=${r18 == 1}, size: {}", body.data.size)
             quota = body.quota
             quotaMinTtl = body.quotaMinTtl
+            val code = Code.values().firstOrNull { it.code == body.code }
+            logger.info("LoliconResponse msg: {}, code: {} {}, count: {}", body.msg, code?.code, code?.msg, body.count)
             if (r18 == 0) {
                 body.data.forEach {
                     nR18Channel.send(it)
@@ -125,6 +162,7 @@ class LoliconUtils {
                 }
             }
         }
+        return null
     }
 
     private suspend fun downloadImage(url: String, save: Boolean = true): ByteArray? {
@@ -219,25 +257,47 @@ class LoliconUtils {
         return if (loliconSetuDB != null) {
             logger.info("get image: {}", loliconSetuDB.setu)
             mutex.withLock { loliconRepository.save(loliconSetuDB.copy(imageStatus = ImageStatus.USED)) }
-            val hex = DigestUtils.md5DigestAsHex(loliconSetuDB.setu.url.toByteArray())
-            val file = File("images/${hex}.${loliconSetuDB.setu.url.split(".").last()}")
-            if (file.exists()) {
-                val byteArray = file.inputStream().readBytes()
-                if (loliconConfig.confounding) {
+            readLoliconSetuDBToByteArray(loliconSetuDB)
+        } else {
+            val loliconSetu = requestImageInfo(r18 = if (r18) 1 else 0, immediately = true)
+            return if (loliconSetu != null) {
+                val byteArray = downloadImage(loliconSetu.url)
+                if (loliconConfig.confounding && byteArray != null) {
                     byteArray[byteArray.size - 1] = Random(System.currentTimeMillis()).nextBytes(1).first()
                 }
                 byteArray
             } else {
-                null
+                getUsedImage()
             }
-        } else {
-            requestImageInfo(r18 = if (r18) 1 else 0)
-            val loliconSetu = r18Channel.receive()
-            val byteArray = downloadImage(loliconSetu.url)
-            if (loliconConfig.confounding && byteArray != null) {
+
+        }
+    }
+
+    private fun readLoliconSetuDBToByteArray(loliconSetuDB: LoliconSetuDB): ByteArray? {
+        val hex = DigestUtils.md5DigestAsHex(loliconSetuDB.setu.url.toByteArray())
+        val file = File("images/${hex}.${loliconSetuDB.setu.url.split(".").last()}")
+        return if (file.exists()) {
+            val byteArray = file.inputStream().readBytes()
+            if (loliconConfig.confounding) {
                 byteArray[byteArray.size - 1] = Random(System.currentTimeMillis()).nextBytes(1).first()
             }
             byteArray
+        } else {
+            logger.warn("image file {} not exist", file.name)
+            null
+        }
+    }
+
+    private suspend fun getUsedImage(): ByteArray? {
+        val loliconSetuDB = mutex.withLock {
+            loliconRepository.findAllByImageStatus(ImageStatus.USED).shuffled().firstOrNull()
+        }
+        return if (loliconSetuDB != null) {
+            logger.info("get used image: {}", loliconSetuDB.toString())
+            readLoliconSetuDBToByteArray(loliconSetuDB)
+        } else {
+            logger.info("no available used image")
+            null
         }
     }
 

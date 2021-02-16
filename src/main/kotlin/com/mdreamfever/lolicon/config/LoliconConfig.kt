@@ -14,5 +14,6 @@ class LoliconConfig {
     var cache by Delegates.notNull<Int>()
     var size1200 by Delegates.notNull<Boolean>()
     var autoDeleteDownloadImage by Delegates.notNull<Boolean>()
+    var reuseImage by Delegates.notNull<Boolean>()
     var confounding by Delegates.notNull<Boolean>()
 }

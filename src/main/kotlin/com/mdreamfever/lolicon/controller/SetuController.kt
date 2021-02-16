@@ -34,23 +34,21 @@ class SetuController {
 
     @GetMapping("/config")
     fun config(
-        @RequestParam api_key: String = "",
-        @RequestParam cache: Int = 10,
-        @RequestParam size1200: Boolean = true,
-        @RequestParam autoDeleteDownloadImage: Boolean = false,
-        @RequestParam confounding: Boolean = true,
+        @RequestParam(required = false) apikey: String?,
+        @RequestParam(required = false) cache: Int?,
+        @RequestParam(required = false) size1200: Boolean?,
+        @RequestParam(required = false) autoDeleteDownloadImage: Boolean?,
+        @RequestParam(required = false) confounding: Boolean?,
+        @RequestParam(required = false) reuseImage: Boolean?,
     ): LoliconConfig {
-        return if (api_key.isBlank()) {
-            loliconConfig
-        } else {
-            loliconConfig.let {
-                it.apiKey = api_key
-                it.cache = cache
-                it.size1200 = size1200
-                it.autoDeleteDownloadImage = autoDeleteDownloadImage
-                it.confounding = confounding
-                it
-            }
+        return loliconConfig.let {
+            it.apiKey = apikey ?: loliconConfig.apiKey
+            it.cache = cache ?: loliconConfig.cache
+            it.size1200 = size1200 ?: true
+            it.autoDeleteDownloadImage = autoDeleteDownloadImage ?: false
+            it.confounding = confounding ?: true
+            it.reuseImage = reuseImage ?: true
+            it
         }
     }
 

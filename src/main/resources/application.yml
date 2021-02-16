@@ -7,8 +7,9 @@ spring:
 server:
   port: 8080
 lolicon:
-  api-key: your-api-key
+  api-key: ''
   cache: 10
   size1200: true
   auto-delete-download-image: false
+  reuse-image: true
   confounding: true
