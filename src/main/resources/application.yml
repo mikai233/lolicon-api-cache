@@ -9,7 +9,7 @@ server:
 lolicon:
   api-key: ''
   cache: 10
-  size1200: true
+  size1200: false
   auto-delete-download-image: false
   reuse-image: true
   confounding: true

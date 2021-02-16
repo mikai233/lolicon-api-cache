@@ -105,8 +105,8 @@ class LoliconUtils {
             }
         }
         if (quotaMinTtl + lastInvokeAt < System.currentTimeMillis()) {
-            delay(System.currentTimeMillis() - lastInvokeAt - quotaMinTtl)
             logger.info("requestImageInfo delay")
+            delay(System.currentTimeMillis() - lastInvokeAt - quotaMinTtl)
         }
         lastInvokeAt = System.currentTimeMillis()
         val baseUrl = "https://api.lolicon.app/setu/"
@@ -138,11 +138,16 @@ class LoliconUtils {
             quotaMinTtl,
             Date(lastInvokeAt),
         )
-        val result = restTemplate.getForEntity(
-            url,
-            LoliconResponse::class.java
-        )
-        val body = result.body
+        val result = try {
+            restTemplate.getForEntity(
+                url,
+                LoliconResponse::class.java
+            )
+        } catch (e: Exception) {
+            logger.error("request image info failed, {}", e.message)
+            null
+        }
+        val body = result?.body
         if (immediately) {
             return body?.data?.firstOrNull()
         }
@@ -267,36 +272,42 @@ class LoliconUtils {
                 }
                 byteArray
             } else {
-                getUsedImage()
+                getUsedImage(r18)
             }
 
         }
     }
 
-    private fun readLoliconSetuDBToByteArray(loliconSetuDB: LoliconSetuDB): ByteArray? {
+    private suspend fun readLoliconSetuDBToByteArray(loliconSetuDB: LoliconSetuDB): ByteArray? {
         val hex = DigestUtils.md5DigestAsHex(loliconSetuDB.setu.url.toByteArray())
         val file = File("images/${hex}.${loliconSetuDB.setu.url.split(".").last()}")
-        return if (file.exists()) {
-            val byteArray = file.inputStream().readBytes()
-            if (loliconConfig.confounding) {
-                byteArray[byteArray.size - 1] = Random(System.currentTimeMillis()).nextBytes(1).first()
+        return coroutineScope {
+            if (file.exists()) {
+                val byteArray = file.inputStream().readBytes()
+                if (loliconConfig.confounding) {
+                    byteArray[byteArray.size - 1] = Random(System.currentTimeMillis()).nextBytes(1).first()
+                }
+                byteArray
+            } else {
+                logger.warn("image file {} not exist", file.name)
+                val channel = if (loliconSetuDB.r) r18Channel else nR18Channel
+                launch {
+                    channel.send(loliconSetuDB.setu)
+                }
+                null
             }
-            byteArray
-        } else {
-            logger.warn("image file {} not exist", file.name)
-            null
         }
     }
 
-    private suspend fun getUsedImage(): ByteArray? {
+    private suspend fun getUsedImage(r18: Boolean): ByteArray? {
         val loliconSetuDB = mutex.withLock {
-            loliconRepository.findAllByImageStatus(ImageStatus.USED).shuffled().firstOrNull()
+            loliconRepository.findAllByImageStatus(ImageStatus.USED).shuffled().firstOrNull { it.r == r18 }
         }
         return if (loliconSetuDB != null) {
             logger.info("get used image: {}", loliconSetuDB.toString())
             readLoliconSetuDBToByteArray(loliconSetuDB)
         } else {
-            logger.info("no available used image")
+            logger.warn("no available used image")
             null
         }
     }
