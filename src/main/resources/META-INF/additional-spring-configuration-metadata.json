@@ -1,0 +1,29 @@
+{
+  "properties": [
+    {
+      "name": "lolicon.api-key",
+      "type": "java.lang.String",
+      "description": "api key."
+    },
+    {
+      "name": "lolicon.cache",
+      "type": "java.lang.Integer",
+      "description": "image cache count."
+    },
+    {
+      "name": "lolicon.size1200",
+      "type": "java.lang.Boolean",
+      "description": "if true, use master_1200 thumb to reduce image size."
+    },
+    {
+      "name": "lolicon.auto-delete-download-image",
+      "type": "java.lang.Boolean",
+      "description": "if true, the used image will be deleted automatically."
+    },
+    {
+      "name": "lolicon.confounding",
+      "type": "java.lang.String",
+      "description": "if true, the last of byte in picture is random."
+    }
+  ]
+}

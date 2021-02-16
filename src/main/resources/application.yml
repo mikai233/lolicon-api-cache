@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:sqlite:image.db
+  jpa:
+    hibernate:
+      ddl-auto: update
+server:
+  port: 8080
+lolicon:
+  api-key: your-api-key
+  cache: 10
+  size1200: true
+  auto-delete-download-image: false
+  confounding: true
