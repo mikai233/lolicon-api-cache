@@ -101,7 +101,8 @@ class LoliconUtils {
             if (immediately) {
                 return null
             } else {
-                delay(60 * 1000)
+                delay(10 * 60 * 1000)
+                quota += 1
             }
         }
         if (quotaMinTtl + lastInvokeAt < System.currentTimeMillis()) {
