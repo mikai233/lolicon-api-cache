@@ -43,10 +43,10 @@ class LoliconUtils {
     private val mutex = Mutex()
     private lateinit var r18Channel: Channel<LoliconSetu>
     private lateinit var nR18Channel: Channel<LoliconSetu>
+    private val logger = LoggerFactory.getLogger(javaClass)
 
     @Autowired
     private lateinit var loliconRepository: LoliconRepository
-    private val logger = LoggerFactory.getLogger(javaClass)
 
     @Autowired
     private lateinit var loliconConfig: LoliconConfig
@@ -101,15 +101,10 @@ class LoliconUtils {
             if (immediately) {
                 return null
             } else {
-                delay(10 * 60 * 1000)
+                delay(60 * 1000)
                 quota += 1
             }
         }
-        if (quotaMinTtl + lastInvokeAt < System.currentTimeMillis()) {
-            logger.info("requestImageInfo delay")
-            delay(System.currentTimeMillis() - lastInvokeAt - quotaMinTtl)
-        }
-        lastInvokeAt = System.currentTimeMillis()
         val baseUrl = "https://api.lolicon.app/setu/"
         val parameters = mutableMapOf<String, Any>()
         if (apiKey.isNotBlank()) {
@@ -139,6 +134,7 @@ class LoliconUtils {
             quotaMinTtl,
             Date(lastInvokeAt),
         )
+        lastInvokeAt = System.currentTimeMillis()
         val result = try {
             restTemplate.getForEntity(
                 url,
